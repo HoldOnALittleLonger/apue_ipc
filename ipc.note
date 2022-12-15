@@ -1,0 +1,99 @@
+UNIX Network Programming Volume 2
+ - Interprocess Communications
+
+Chapter 1: Overview
+    IPC (interprocess communication):
+      It means the methods for message passing between different processes in a system.
+
+    Synchronize (sync):
+      A way to guarantee a order between different processes access shared resource concurrently.
+
+    IPC in the book to be discussed:
+      <IPC type>                   <persistent>		 <namespace, identifier>
+      pipe                         (process-persistent)  (noname, descriptor)
+      fifo                         (process-persistent)  (path, descriptor)
+      SystemV IPC:
+        message queue              (kernel-persistent)   (key_t, SystemV IPC ID)
+	semaphore                  (kernel-persistent)   (key_t, SystemV IPC ID)
+	shared memory              (kernel-persistent)	 (key_t, SystemV IPC ID)
+      Posix IPC:
+        message queue              (kernel-persistent)   (Posix IPC name, mqd_t)
+	semaphore                  (kernel-persistent)   (Posix IPC name, sem_t)
+	unnamed semaphore          (process-persistent)  (noname, sem_t)
+	shared memory              (kernel-persistent)	 (Posix IPC name, descriptor)
+	mutex                      (process-persistent)  (noname, pthread_mutex_t)
+	condition variable         (process-persistent)  (noname, pthread_cond_t)
+	(fcntl) record lock        (process-persistent)  (path, descriptor)
+	read-write lock            (process-persistent)  (noname, pthread_rwlock_t)
+      RPC (Remote Procedure Call)  (by achieving)        (program/version, RPC ID)
+      Door	  	    	   (by achieving)	 (path, descriptor)
+      Network socket               (process-persistent)  (IP + TCP OR UDP | path, descriptor)
+
+    Evolution of Synchronizing in UNIX:
+      a way to sync between processes for write or read a file ->
+      record locking ->
+      SystemV semaphore ->
+      Posix semaphore ->
+      mutex ->
+      condition variable ->
+      read-write lock (it is noe contained in POSIX.1)
+
+    Shared message for process and thread:
+      Three method to shared message between processes:
+        1>  through filesystem
+	2>  through kernel 
+	3>  through shared memory
+
+      #  almost all of IPC can used between threads,because in Linux,thread just a task which
+         has some process address space and shared process resource.
+
+    Persistence of IPC object:
+      persistenct of any type for IPC can be defined as time how long the object of a IPC is existed.
+      Three type persistence:
+        1>  process-persistent    -
+	      exist until the last process exit which holding the IPC object.
+	2>  kernel-persistent     -
+	      exist until the kernel reboot or delete it in explicitly.
+	3>  filesystem-persistent -
+	      exist until delete the IPC object explicitly.
+	      (because the IPC object exist in filesystem,it will be existing even reboot)
+
+	#  Posix.1 allows to achieve Posix_semaphore Posix_message_queue Posix_shared_memory in
+	   different ways.(filesystem or kernel object all is allowed)
+
+    Name Space:
+      Name space is a set of available names of IPC for especial type.
+      IPC object must has a name or a identifier to identify it.No related processes can access the IPC
+      through the identifier.(pipe just such a IPC between related processes)
+
+      #  related processes:
+           processes has same parent process of has same grandparent process.
+	   in normally,almost all user process has same grandparent process it is a login shell.
+      #  Generic standard Name Space is working by Posix.1g workgroup.
+
+    Global variable for error:
+      errno  --  <sys/errno.h>
+        system call interfaces would use this variable errno to indicates which type of error had happened.
+	(IPC interfaces is alike in same behavior)
+
+      #  No any error equal to 0,all error macro definition is begin with 'E'
+
+      Macro for thread environment:
+        _REENTRANT                /* can reentry */
+	_POSIX_C_SOURCE 199506L   /* POSIX.1 standard 199506L */
+
+	either macro definition would effective thread special errno variable.
+	in this case,errno maybe expand to a function and program can use this function to access thread 
+	special errno copy.
+         
+    Standard:
+      POSIX: (Poartable Operating System Interface) <ISO/IEC 9945>
+        POSIX.1  -  System application program interface(API)[C Language]  (IEEE Std 1003.1-1988)
+        POSIX.2  -  Shell and utilities	       				   (IEEE Std 1003.2-1992)
+        POSIX.3  -  System administration  (continious working)
+
+	#  Socket and XTI were contained in IEEE Std 1003.1 -- P1003.1g
+
+      X/OPEN:
+        XPG  -  X/OPEN Portablity Guide
+	SUS  -  Single UNIX standard
