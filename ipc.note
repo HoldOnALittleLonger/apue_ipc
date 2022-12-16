@@ -97,3 +97,153 @@ Chapter 1: Overview
       X/OPEN:
         XPG  -  X/OPEN Portablity Guide
 	SUS  -  Single UNIX standard
+
+
+Chapter 2 : POSIX IPC
+    All posix ipc is contained in REALTIME standard,so if program used them in code,then have to link
+    rt library.(-lrt)
+
+    POSIX IPC:
+      Message Queue: (detail in Manual) <mqueue.h>
+        Service Primitive:
+	  mq_open
+	  mq_close
+	  mq_unlink
+	  mq_getattr
+	  mq_setattr
+	  mq_send
+	  mq_receive
+	  mq_notify
+
+	struct mq_attr {
+	       long mq_flags;
+	       long mq_maxmsg;
+	       long mq_msgsize;
+	       long mq_curmsgs;
+	};
+      Semaphore: (detail in Manual) <semaphore.h>
+        Service Primitive:
+	  sem_open
+	  sem_close
+	  sem_unlink
+	  sem_init
+	  sem_destroy
+	  sem_wait
+	  sem_trywait
+	  sem_post
+	  sem_getvalue
+      
+      #  posix semaphore is contained in thread standard,so have to link pthread library.(-lpthread)
+
+      Shared Memory: (detail in Manual) <sys/mman.h>
+        Service Primitive:
+	  shm_open
+	  shm_unlink
+	  
+	  /* these function is unix standard */
+	  /* posix shared memory will be abstracted as a file descriptor */
+	  ftruncate
+	  fstat
+	  mmap
+	  munmap
+
+    POSIX IPC Name:
+      rules of posix ipc name:
+        1>  Length of name cant exceed PATH_MAX(contains '\0')
+	2>  different between full path and relative path depend on implementation
+	3>  interpretation for additional '/' depend on implementation
+
+      additional rules:
+        1>  must start with '/'
+        2>  only one '/' can appears in posix ipc name
+
+	#  this rule for improve portiablity but not all implementation support.
+	   realtime standard attempts to allow achieve POSIX IPC in kernel,the 
+	   gain is that posix ipc can works fine on non-disk machine,all resource
+	   create in memory.for that,some architecture cant support this.
+	   (A standard way of being nonstandard - POSIX)
+
+    POSIX IPC type checking macro:
+      bool S_TYPEISMQ(buf);
+      bool S_TYPEISSEM(buf);
+      bool S_TYPEISSHM(buf);
+
+      buf is a struct type of stat defined in <sys/stat.h>
+      in usually,these macro should be inefficiency because of it that they
+      depend on type of IPC how to implement.
+      if POSIX IPC doesnt implement in a especial file type,then these macro
+      always return false.
+
+    POSIX IPC open and create:
+      Permission allowed of IPC to be open:
+        MQ:
+	  O_RDONLY | O_WRONLY | O_RDWR
+	SEM:
+	  O_RDWR  /* operate a semaphore needs RDWR permission */
+	SHM:
+	  O_RDONLY | O_RDWR
+
+      Create of IPC:
+        MQ AND SEM AND SHM:
+	   if not existed,then try to create it.
+	   
+	   O_CREAT | O_EXCL
+	   /* if it existed but assigned O_CREATE | O_EXCL,then return -1,errno = EEXIST */
+
+      NONBlock open:  /* O_NONBLOCK */
+        MQ
+
+      Truncate:
+        /* if it existed,allow to trunc it */
+	SHM
+
+      User-ID and Group-ID:
+        MQ:
+	  user-id = process effective user-id
+	  group-id = process effective group-id 
+
+	SEM AND SHM:
+	  user-id = process effective user-id
+	  group-id = process effective group-id OR a effective system default group-id
+	  /* open() a file,the group id could be process group-id or directory group-id */
+
+      Permission checking when open or create a POSIX IPC:
+        point to be depened for checking:
+	  1>  permission from create IPC
+	  2>  permission from accessing
+	  3>  user-id and group-id
+
+	order for checking:
+	  if (process user-id == 0)
+	    allow();
+	  else if (user-id == process user-id && permission == accessing permission)
+	    allow();
+	  else if ((group-id == process group-id || group-id == process attached group-id)
+	       	  && permission == accessing permission)
+	    allow();
+	  else if (other-user-permission == accessing permission)
+	    allow();
+	  else
+	    refuse();
+
+      Figure for open POSIX IPC:
+        open -> if existed {
+	     	  if O_CREAT | O_EXCL is true
+		    open failed
+		  else if permission approve
+		    open successed  /* this would open a POSIX IPC which is existed */
+		  else
+		    open failed
+	     	}
+		else {
+		  if O_CREAT is true
+		     if resource avaiable
+		       open successed  /* this would create a POSIX IPC */
+		     else
+		       open failed
+		  else
+		    open failed
+		}
+        
+
+
