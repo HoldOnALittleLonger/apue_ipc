@@ -244,6 +244,344 @@ Chapter 2 : POSIX IPC
 		  else
 		    open failed
 		}
+
+Chapter 3 : SystemV IPC
+    SystemV IPC is not supported by Posix.2,it was contained in Unix98.
+
+    SystemV IPC:
+      Message Queue: <sys/msg.h>
+        Service Primitive:
+	  msgget
+	  msgctl
+	  msgsnd
+	  msgrcv
+
+      Semaphore: <sys/sem.h>
+        Service Primitive:
+	  semget
+	  semctl
+	  semop
+
+      Shared Memory: <sys/shm.h>
+        Service Primitive:
+	  shmget
+	  shmctl
+	  shmat
+	  shmdt
         
+    SystemV IPC Name:
+      SystemV IPC use a value of key_t as key name,this value is combined by path and id via ftok().
+
+      <sys/types.h>
+      <sys/ipc.h>
+      key_t ftok(const char *pathname, int proj_id);
+      >>  in normally,ftok() would take stat.st_dev and stat.st_ino of pathname,and combines these value with the
+          low 8bits of proj_id,then return result as key_t.
+	  (if proj_id == 0,then behavior of ftok() is undefined,but in glibc,no such request)
+
+      #  Special key for SystemV IPC is IPC_PRIVATE(equal to 0 normally),
+         XXXget() can use this key to create a unique IPC object.but this IPC object should not used by
+	 processes they are not relative.
+
+    SystemV IPC struct ipc_perm:
+      kernel maintains a struct ipc_perm for each IPC object.
+
+      <sys/ipc.h>
+      struct ipc_perm {
+        key_t __key;		/*  key_t  */
+	uid_t uid;		/*  owner uid  */
+	gid_t gid;		/*  owner gid  */
+	uid_t cuid;		/*  creator uid  */
+	gid_t cgid;		/*  creator gid  */
+	unsigned short mode;	/*  permissons  */
+	unsigned short __seq;  	/*  sequence number  */
+      };
+
+      XXXget() function would use some bits in flag argument to set ipc_perm.mode.
+      __key == key argument.
+      uid == caller uid.
+      gid == caller gid.
+      cuid == creator uid.
+      cgid == creator gid.
+      mode almost like mode in open()(linux),but in UNIX has some difference.
+      >>  MSG_R	       (owner permission)
+      	  MSG_W
+	  MSG_R >> 3   (group permission)
+	  MSG_W >> 3
+	  MSG_R >> 6   (other permission)
+	  MSG_W >> 6
+	  SEM_R
+	  SEM_A(SEM_W)
+	  SEM_R >> 3
+	  SEM_A >> 3
+	  SEM_R >> 6
+	  SEM_A >> 6
+	  SHM_R
+	  SHM_W
+	  SHM_R >> 3
+	  SHM_W >> 3
+	  SHM_R >> 6
+	  SHM_W >> 6
+      special flag for XXXget(),IPC_CREATE,IPC_EXCL alike to O_CREATE O_EXCL.
+      /*  different IPC has different ipc_perm.mode(detail in manual)  */
+
+      __seq like a refer counter,every IPC object was delete,its value would increase,
+      if exceed range then begin from 0.
+      >>  reasons of __seq:
+      	    1> prevent process scan global IPC object try to does some badly action.
+	       everytime to reuse a IPC table item,the identifier returned by XXXget()
+	       would add IPC table item number.
+	    2> prevent reuse SystemV IPC identifier in short time.
+
+      /*  __seq just increase while creating a IPC via same key,then identifier would be changed  */
+      /*  seq: 0 -> 1 -> 2 -> ...  identifier: 0 -> 32768 -> 65536 -> ...  */
+      /*  this behavior would be reset until kernel reboot  */
+
+      #  XXXctl() can changes owner ID via IPC_SET command,but cant change creator ID.
+      #  ipcs program can report system IPC state,ipcrm program can delete IPC(XXXctl() use IPC_RMID command).
+
+    IPC permission checking:
+      first checking:
+        XXXget(),if flag open some bits they are closed in ipc_perm.mode.(get a existed IPC)
+      second checking:
+        check permissions everytime to access IPC object.
+	a> uid == 0 OK
+	b> uid == ipc_perm.uid OR uid == ipc_perm.cuid AND mode OK
+	c> gid == ipc_perm.gid OR gid == ipc_perm.cgid AND mode OK
+	d> other,mode(other accessible) OK
+
+    Limit on IPC:
+      kernel limit SystemV IPC,but there has a way to change limit via system config parameter(e.g. sysctl)
+      default limit range is very small.
+
+
+Chapter 4 : Messaging between processes(PIPE, FIFO)
+    pipe : supports messaging between parent process and child process.
+    fifo : supports messaging between no relative processes.
+
+    #  generally,pipe is half-duplex,but some system supports full-duplex pipe(SVR4).
+    #  socketpair() function supports full-duplex,it was contained in SVR4.
+    #  POSIX.1 and UNIX98 just required half-duplex pipe.
+    #  socket is full-duplex(even unix domain socket).
+
+    PIPE :
+      <unistd.h>
+      int pipe(int fd[2]);
+      #  return 0 if succeed,return -1 if fault.
+      >>  fd[0] as read,fd[1] as write.
+
+      <stdio.h>
+      FILE *popen(const char *command, const char *type);
+      #  return FILE pointer if succeed,return NULL if fault.
+      >>  command would be executed by shell,type tell shell how to connect this pipe between caller.
+      	  type == "r" means caller want read data from command,
+	  type == "w" means caller want write data to command.
+
+      int pclose(FILE *stream);
+      #  return terminate state of shell if succeed,return -1 if failed.
+      >>  close a stream open by popen().
+
+    FIFO : 
+      <sys/stat.h>
+      <sys/types.h>
+      <fcntl.h>
+      <unistd.h>
+      int mkfifo(const char *pathname, mode_t mode);
+      #  return 0 if succeed,return -1 if failed.
+      >>  mkfifo() try to creates a named pipe in file-system with the mode.
+      	  if such pipe has been existed,mkfifo() will failed.
+	  for use the fifo,process have to call open() to open it,
+	  use read() or write() to operates it,
+	  use close() to close fd,use unlink() to delete the fifo.
+
+    Attributes of pipe and fifo :
+      flag O_NONBLOCK set up for pipe and fifo :
+        pipe : use fcntl() to set it.
+	fifo : specify O_NONBLOCK when call open().
+
+      actions when operates pipe or fifo :
+        open fifo with RD, a process open fifo with WR already,
+	  return(block), return(nonblock)
+	open fifo with RD, no process open fifo with WR already, 
+	  block until a process open fifo with WR(block), return(nonblock)
+	open fifo with WR, a process open fifo with RD already, 
+	  return(block), return(nonblock)
+	open fifo with WR, no process open fifo with RD already,
+	  block until a process open fifo with RD(block), return ENXIO(nonblock)
+
+	read empty fifo or pipe, pipe or fifo has been opened with WR, 
+	  block until data come or the pipe or fifo was closed(block), return EAGAIN(nonblock)
+	read empty fifo or pipe, pipe or fifo has not been opened with WR, 
+	  return 0(EOF)(block), return 0(EOF)(nonblock)
+	
+	write pipe or fifo, pipe or fifo has not been opened with RD, 
+	  deliver SIGPIPE to caller(block), deliver SIGPIPE to caller(nonblock)
+	write pipe or fifo, pipe or fifo has been opeend with RD :
+	      (block)
+	        if size_n <= PIPE_BUFF
+		then
+		  if space_of_pipe >= size_n
+		  then
+		    write all data
+		  else
+		    block until has space to write (return EAGAIN,nonblock)
+		else
+		  if space_of_pipe >= 1B
+		  then
+		    write apart of data
+		  else
+		    block until has space to write (return EAGAIN,nonblock)
+
+      limit : 
+        <limits.h>
+        PIPE_BUF : a data size limit of atomic pipe operation defined in <limit.h>,
+		   generally is 512B,but there is could be changed for FIFO,
+		   POSIX.1 consider FIFO is a pathname variable depends on file-system.
+		   so pathconf() and fpathconf() can query its value.
+
+		   #  if size_n > PIPE_BUF,then kernel not promise operation is atomic.
+		   #  maybe data1 and data2 interleaving.
+
+        OPEN_MAX : the maxinum size of number for opened files in a process.
+		   sysconf() can query its value.
+
+    Single sever,several clients model :
+      Procedure :
+        Sever -> mkfifo -> open it with read and then open it with write
+	-> (cycle point) wait for message from client -> open client's fifo 
+	-> send required data by client	-> close client's fifo
+	-> enter next cycle
+
+	#  sever open its fifo twice that is to prevent open this fifo
+	#  everytimes while client came
+
+	Client -> mkfifo -> open sever fifo for write -> send request
+	-> open client fifo for read -> wait data from sever -> close
+	-> unlink fifo
+
+	#  there is a convention that is FIFO and PIPE just works based
+	#  single direction working.
+
+      A properly request format :
+        Request format : "<PID NUMBER> <REQUEST>"
+
+      Concurrent server :
+        one-child-per-client :
+	  1> fork child server to serve client.
+	  2> create child thread to serve client.
+
+      DoS :
+        server open client's fifo with BLOCKED,but client never open its fifo.
+	server would blocked until restart.
+
+    Atomic attribute of FIFO(PIPE) write :
+      data size for write must less than or equal to PIPE_BUF,
+      OS will promise the datas from several client never interleaving.
+
+    Attentions :
+      if close a FIFO or PIPE,the all data in it would be abanded by kernel.
+      FIFO cant be used in NFS.
+
+    Byte stream and message :
+      Byte stream : no bound to specify message length,this is the basic UNIX I/O model.
+      Message : has bound to specify message length,it is alike to datagram.(UDP, Sun RPC)
+
+      Several method to build Message over Byte stream :
+        1> special end flag (\n, \r ...)
+	#  but if such flag symbol was contained in data,it would be interpreted as end flag.
+
+	2> explicit length (datagram header)
+	#  struct header { size_n, type_id, buffer ... };
+
+	3> one record one connection
+	#  this method might cause resource wasting.(create new connection ...)
+
+
+
+Chapter 15 : Door
+    (Solaris 2.6,Linux was not support in 3.10)
+    door is a ipc for remote procedure call,it is invented for Spring distributed operating system.
+    LPC(local procedure call) : the procedure was called and the caller in same process.
+    	      		        it is synchronous call.
+				(POSIX thread provides a way to do asynchronous procedure call)
+    RPC(remote procedure call) : the procedure was called and the caller in different processes.
+    	       		       	 it is asynchronous call.
+    	       		         (RPC supports different hosts in network)
+
+    local remote procedure call :
+      RPC in host scope,the different processes in same host.
+
+    door :
+      a process calls the procedure of another process in a same host.(door supports network communication)
+      it is the enter point of procedure which in server process,client use it to access the procedure.
+      and it is synchronous call.
+
+      caller and called are communicate in arguments and returns for information exchange.
+      
+      Solaris 2.6 door is implementation is involves to thread.
+      one client to one server thread,so the server door procedure must be thread-safe.
+
+      usage order of door in Solaris 2.6 :
+        server :
+	  door_create ->  create door,door use descriptor to identify
+	  fattach ->      relate filesystem path to door ipc
+	  enter block ->  wait for client
+	  door_return 	  return result to client
+	  
+    	client :
+	  open ->	  open door path in filesystem
+	  door_call ->	  call procedure in server
+	  wait server return
+
+      because use descriptor to identify door ipc,so could send door to another process via
+      descriptor transfer.
+
+      <door.h>
+        typedef struct door_arg {
+	    char *data_ptr;		
+	    size_t data_size;
+	    door_desc_t *desc_ptr;
+	    size_t desc_num;
+	    char *rbuf;
+	    size_t rsize;
+	} door_arg_t;
+
+	data_ptr  : call-> ptr to data arguments
+		    return-> ptr to data results
+	data_size : call-> #bytes of data arguments
+		    return-> actual #bytes of data results
+	desc_ptr  : call-> ptr to descriptor arguments
+		    return-> ptr to descriptor results
+	desc_num  : call-> number of descriptor arguments
+		    return-> number of descriptor results
+	rbuf      : ptr to result buffer
+	rsize     : #bytes of result buffer
+
+	the format of arguments and return-values,have to take an agreement ahead between client and server.
+	for eazy design,could make encapsulation for arguments or results in a structure type.
+	no arguments data_ptr have set to NULL,and data_size set to zero.
+
+	desc_ptr is an array of door_desc_t to save descriptors they would transfer to server or
+	receive from server.
+
+	rbuf is the buffer,arguments and results can use same buffer,that means data_ptr and desc_ptr could
+	point to rbuf,and it is also OK when return.
+	if the size of rbuf is too less that cant save results from server,then door library function would
+	allocate a new buffer through mmap() in caller process address space automatically,then update rbuf
+	and rsize.if a new buffer was allocated,then user have to call munmap() to unmap the buffer.
+
+	int door_call(int fd, door_arg_t *argp);
+	/*
+	 *  door_call() should be called by client,it would calls a procedure in server process address space.
+	 *  @fd  :  a file descriptor which identify the door ipc,normally,it is returned by open() to open
+	 *          door ipc file in filesystem.
+	 *  @argp  :  structure pointer points to door_arg_t object which contains call arguments and also used
+	 *         :  as result buffer to saves results from server procedure call.
+	 *  return - return 0 if succeed,otherwise -1.
+	 */
+
+		
+          
+
 
 
