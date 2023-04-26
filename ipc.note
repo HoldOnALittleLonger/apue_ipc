@@ -499,7 +499,9 @@ Chapter 4 : Messaging between processes(PIPE, FIFO)
 
 
 Chapter 15 : Door
-    (Solaris 2.6,Linux was not support in 3.10)
+    (Solaris 2.6)
+    /*  Linux 3.10 rpc function based Sun RPC  */
+
     door is a ipc for remote procedure call,it is invented for Spring distributed operating system.
     LPC(local procedure call) : the procedure was called and the caller in same process.
     	      		        it is synchronous call.
@@ -579,6 +581,120 @@ Chapter 15 : Door
 	 *         :  as result buffer to saves results from server procedure call.
 	 *  return - return 0 if succeed,otherwise -1.
 	 */
+
+	int door_create(void (*server_procedure)(void *cookie, char *argp, size_t arg_size, door_desc_t *dp,
+	    		     			 uint_t n_desc), void *cookie, uint_t attributes);
+	/*  @dp : dataptr  */
+	/*
+	 *  door_create() is such function that create door and returns the descriptor.
+	 *  @server_procedure : this procedure would as server function when a door_call occurs.
+	 *  @cookie : cookie is as identifier as usual.this parameter would as argument for invoke server_procedure.
+	 *  @attributes : attributes for newly created door.
+	 *  		  Valid value : (could combine with OR)
+	 *		  	      DOOR_UNREF
+	 *			      DOOR_UNREF_MULTI
+	 *			      DOOR_PRIVATE
+	 *			      DOOR_REFUSE_DESC
+	 *			      DOOR_NO_CANCEL
+	 *  return - return descriptor of door if succeed,otherwise returns -1.
+	 */
+	    DOOR_PRIVATE : indicates that the door has the server threads poor owns to itself.
+	    		   when an client request is came,door library function would create
+			   server thread automatically,and the thread would put into process
+			   threads poor in default.
+	    DOOR_UNREF   : when the number of descriptors that refer to this door drops to one,
+	    		   recall server_proc once again,by the time, DOOR_UNREF_DATA designates
+			   an unreferenced invocation,as the argp argument passed to server_procedure.
+			   in the case of an unreferenced invocation,the values for arg_size,dp and
+			   n_desc are 0.only one unreferenced invocation is delivered on behalf of a door.
+
+	/*  the door descriptor is default exist FD_CLOEXEC.
+	 *  process forks a child process,just only parent is able to receive request from client,even it still
+	 *  open in child.
+	 */
+
+	!!  for make a mapping between filesystem path and door descriptor,have to invoke fattach() to map path to
+	    door descriptor.client can only access the door via filesystem path.
+	!!  function fdetach() undo such mapping.
+
+	int door_return(char *dataptr, size_t datasize, door_desc_t *descptr, size_t *ndesc);
+	/*
+	 *  door_return - return from a door invocation.just can call this function from server_proc.
+	 *  @dataptr : pointer points to result of data.
+	 *  @datasize : size of result buffer.
+	 *  @descptr : pointer points to result of descriptor.
+	 *  @ndesc : pointer points to a buffer where saves the size of result of descriptor.
+	 *  return - no return if succeed,otherwise return -1.
+	 */
+
+	 int door_cred(door_cred_t *cred);
+	 /*
+	  *  door_cred - an interface for server to retrive user identifier from door_call.
+	  *  @cred : a pointer points to an buffer which hold size same as structure door_cred_t.
+	  *  return - return 0 if succeed,otherwise return -1.
+	  */
+
+	 typedef struct door_cred {
+	     uid_t dc_euid;    /*  effective user ID of client  */
+	     gid_t dc_egid;    /*  effective group ID of client  */
+	     uid_t dc_ruid;    /*  real user ID of client  */
+	     gid_t dc_rgid;    /*  real group ID of client  */
+	     pid_t dc_pid;     /*  process ID of client  */
+	 } door_cred_t;
+
+	 /*  door_cread should be called in server_proc or in a function which is be called by server_proc.  */
+
+	 int door_info(int fd, door_info_t *info);
+	 /*
+	  *  door_info - retrive server information by client.
+	  *  @fd : door descriptor.
+	  *  @info : structure pointer points to door_info_t.
+	  *  return - return 0 if succeed,otherwise return -1.
+	  */
+
+	 typedef struct door_info {
+	     pid_t di_target;			/*  server process ID  */
+	     door_ptr_t di_proc;		/*  server procedure  */
+	     door_ptr_t di_data;		/*  cookie for server procedure,the first parameter in server_proc */
+	     door_attr_t di_attributes;		/*  attributes associated with door  */
+	     door_id_t id_uniquifier;		/*  unique number  */
+	 } door_info_t;
+
+	 /*  attributes DOOR_LOCAL and DOOR_REVOKE are possible include in di_attributes.
+	     DOOR_LOCAL : the procedure is a part of current process
+	     DOOR_REVOKE : the server proc had been destroyed by server via door_revoke()
+	 */
+
+	 /*  every door would has a unique number in system scope while it is create,di_uniquifier would save the number  */
+	 
+	 !!  in normally,client calls door_info() to retrive server informations,but server proc could calls this function,too.
+	     just pass DOOR_QUERY as the first argument.
+
+	 int door_bind(int fd);
+	 /*
+	  *  door_bind - bind current calling thread to the thread poor which associated with the door descriptor.
+	  *  	       	 if it is been,then implicitly release current calling thread from the thread poor.
+	  *  @fd : the door descriptor.
+	  *  return - return 0 if succeed,otherwise return -1.
+	  */
+
+	 int door_unbind(void);
+	 /*
+	  *  door_unbind - explicitly unbind current calling thread from the thread poor it had been binded.
+	  *  return - return 0 if succeed,otherwise return -1.
+	  */
+
+	 int door_revoke(int fd);
+	 /*
+	  *  door_revoke - undo door accessing.
+	  *  @fd : the door descriptor which would be undo accessing.
+	  *  return - return 0 if succeed,otherwise return -1.
+	  *  !!  a door can only be undo by a process which created this door.
+	  */
+
+	 /*  if a door accessing instance in progressing while server process invokes door_revoke,it still
+	  *  effective until completed.
+	  */
 
 		
           
