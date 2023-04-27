@@ -581,6 +581,8 @@ Chapter 15 : Door
 	 *         :  as result buffer to saves results from server procedure call.
 	 *  return - return 0 if succeed,otherwise -1.
 	 */
+	 /*  should always access result via argp.data_ptr,because rbuf might reallocate.  */
+
 
 	int door_create(void (*server_procedure)(void *cookie, char *argp, size_t arg_size, door_desc_t *dp,
 	    		     			 uint_t n_desc), void *cookie, uint_t attributes);
@@ -588,7 +590,8 @@ Chapter 15 : Door
 	/*
 	 *  door_create() is such function that create door and returns the descriptor.
 	 *  @server_procedure : this procedure would as server function when a door_call occurs.
-	 *  @cookie : cookie is as identifier as usual.this parameter would as argument for invoke server_procedure.
+	 *  @cookie : cookie as identifier as usual.this parameter would as argument for invoke server_procedure.
+	 *  	      caller could use this argument pass additional message to server_proc.
 	 *  @attributes : attributes for newly created door.
 	 *  		  Valid value : (could combine with OR)
 	 *		  	      DOOR_UNREF
@@ -607,6 +610,18 @@ Chapter 15 : Door
 			   an unreferenced invocation,as the argp argument passed to server_procedure.
 			   in the case of an unreferenced invocation,the values for arg_size,dp and
 			   n_desc are 0.only one unreferenced invocation is delivered on behalf of a door.
+			   ways to refer a door :
+			     1>  file descriptor returned by door_create(). 
+			     	 (generally,this fd is continously opened until server process stop,this is
+				  whay unreferenced invocation condition is drops to one not zero)
+			     2>  filesystem path mapping by fattach().	    
+			     3>  client open door for door_call().	    
+			   ways to decrease door references :
+			     1>  close file descriptor returned by door_create().
+			     2>  unlink the path mapped by fattach().
+			     3>  client close the file descriptor returned by open().
+			   /*  generally,call door_return(NULL, 0, NULL, 0) to return from an unreferenced 
+			       invocation.  */
 
 	/*  the door descriptor is default exist FD_CLOEXEC.
 	 *  process forks a child process,just only parent is able to receive request from client,even it still
@@ -616,6 +631,9 @@ Chapter 15 : Door
 	!!  for make a mapping between filesystem path and door descriptor,have to invoke fattach() to map path to
 	    door descriptor.client can only access the door via filesystem path.
 	!!  function fdetach() undo such mapping.
+	!!  the thread which running a server_proc would be created only an invocation of door_call() by client is 
+	    came.if server process has several server procedure,all server_proc would put into same thread poor.
+	    
 
 	int door_return(char *dataptr, size_t datasize, door_desc_t *descptr, size_t *ndesc);
 	/*
