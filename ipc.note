@@ -714,6 +714,40 @@ Chapter 15 : Door
 	  *  effective until completed.
 	  */
 
+	 door feature : send file descriptor to client
+	   Linux is able to use socket option and the interfaces sendmsg() and recvmsg() to send file descriptor
+	   between server and client.
+	   Solaris door API provides similar featrue.
+
+	   typedef struct door_desc {
+	       door_attr_t d_attributes;	/*  tag for union  */
+	       union {
+	           struct {			/*  valid if tag == DOOR_DESCRIPTOR  */
+		       int d_descriptor;	/*  descriptor number  */
+		       door_id_t d_id;		/*  unique id  */
+		   } d_desc;
+	       } d_data;
+	   } door_desc_t;
+
+	   for send descriptor via door,have to set door_desc_t * parameter points to a target object.
+	   that object saves the file descriptor in d_descriptor and d_attributes is equal to DOO_DESCRIPTOR.
+	   client use door_call() to send file descriptor to server,and server use dool_return() to send file
+	   descriptor to client.
+
+	   note :
+	     the file descriptor number has same sense from a process to another one just at the time is
+	     before fork or after fork,and before exec or after exec.
+	     child inherited fd from parent,and the case in exec is let the file descriptor still opened if 
+	     FD_CLOEXEC is off.
+
+	   because door_return() dont return,so the file descriptor cant be closed after door_return(),then those
+	   fd would still opened until server stop.
+	   for solve this issue,have to let server records the fds it opened,and closes them at appropriate time point.
+	   Solaris 2.7 update d_attributes,added DOOR_RELEASE,this attribute indicates that close file after its fd
+	   had been sended.(DOOR_DESCRIPTOR | DOOR_RELEASE)
+	   
+	   
+	   
 		
           
 
