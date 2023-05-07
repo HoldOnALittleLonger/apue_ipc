@@ -745,6 +745,78 @@ Chapter 15 : Door
 	   for solve this issue,have to let server records the fds it opened,and closes them at appropriate time point.
 	   Solaris 2.7 update d_attributes,added DOOR_RELEASE,this attribute indicates that close file after its fd
 	   had been sended.(DOOR_DESCRIPTOR | DOOR_RELEASE)
+
+	 void (*)() door_server_create(void (*proc)(door_info_t *));
+	 /*
+	  *  door_server_create - this function is used to set server creation procedure.
+	  *  			  every time a client call came,before a new server_proc was
+	  *			  created,the procedure @proc have to be processed first.
+	  *			  for manually manage server_proc thread,have to use this
+	  *			  interface.
+	  *			  procedure @proc only be executed when a new server thread
+	  *			  is going to create.
+	  *  @proc - the procedure which will be called when a client call came and need to create
+	  *  	     a new server thread.
+	  *  return - returns a function.
+	  */
+	   normally,door library function automatically create new server thread,but if used this interface,
+	   then @proc have to create new server thread to instead of door library function automatically
+	   creation.
+	   it is able to control server thread number,stack size,etc.
+	   the new thread is created by @proc must be PTHREAD_SCOPE_SYSTEM and has attribute PTHREAD_CREATE_DETACHED.
+	   if want to control server threads,could use DOOR_PRIVATE attribute when call door_create(),all new 
+	   server procedure will be putted into private thread pool.
+	   if used private thread pool,then server thread have to calls door_bind() to bind itself with the 
+	   private thread pool which is associated to the door.
+	   use door_return(NULL, 0, NULL, 0) in server threads let themselves available for incoming door invocations.
+
+	   e.g.
+	     void my_create(door_info_t *pDinfo)  /*  procedure for create server thread  */
+	     {
+	         pthread_t tid;
+		 pthread_attr_t attr;
+		 pthread_attr_init(&attr);
+		 pthread_attr_setscope(&attr, PTHREAD_SCOPE_SYSTEM);
+		 pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
+		 pthread_create(&tid, &attr, my_thread, (void*)pDinfo);
+		 pthread_attr_destroy(&attr);
+	     }
+
+	     void my_thread(door_info_t *pDinfo)  /*  server thread  */
+	     {
+	         pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, NULL);
+		 door_return(NULL, 0, NULL, 0);
+	     }
+
+	     int main(void)
+	     {
+	         ...
+		 (void)door_server_create(my_create);
+	     }
+
+	   POSIX thread is allow to cancel default,but thread itself or creator could set cancel state.
+	   if client stoped a door call on the server thread is disabled cancel,the door server procedure
+	   is still executes but the result from door_return() will be discared.
+	   if server procedure allows client stop door call in beforehand,then the server thread which 
+	   server procedure on have to deal with this event.
+
+	   kernel thread :
+	     kernel thread is the basic lightweight object which can be scheduled indepently and executed
+	     on a system processor.kernel thread dont associated with any user process.
+	   lightweight process : (hot thread)
+	     lightweight process is based on kernel thread but is user visible in user process.
+	     every lightweight process is associated with a kernel thread.
+	   user thread : (cold thread)
+	     thread in user process and for kernel is unvisible.they dont associate with any
+	     kernel thread.they are created by thread library function.
+
+	   the threads in a process has two type :
+	     1>  thread which bind with a lightweight process.
+	     2>  thread which in common lightweight process pool but dont bind with any lightweight process.
+
+	     PTHREAD_SCOPE_SYSTEM means lightweight process binding.
+	     PTHREAD_SCOPE_PROCESS means lightweight process unbinding.
+	   	   
 	   
 	   
 	   
