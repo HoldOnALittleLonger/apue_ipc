@@ -816,6 +816,54 @@ Chapter 15 : Door
 
 	     PTHREAD_SCOPE_SYSTEM means lightweight process binding.
 	     PTHREAD_SCOPE_PROCESS means lightweight process unbinding.
+
+    prematurely terminate :
+        if server prematurely terminated,but client was blocked for wait result,
+        door_call() will be interrupted,system call interrupted.(EINTR)
+
+	system call door_call() is not possible to restart if it was interrupted,
+	in the time client calls door_call() and blocked,any signal was received will interrupts door_call().
+	return error EINTR.
+
+	idempotent :
+	  in the sense for a procedure that is this procedure is able to be called more than once but no any
+	  error will occurs.
+	non-idempotent :
+	  in the sense for a procedure,that is,if it was called more than once,every calls has different result.
+
+	client prematurely terminated >
+	  if client was blocked in door_call() but it prematurely terminated,then system send a cancel request
+	  to server thread.
+	  if server thread wants to care about such request,then it have to does these works :
+	    enable cancel state  (default is disabled cancel)
+	    if necessary,push cleanup function for thread
+
+	    e.g.
+	      void server_proc(void *cookie, char *dataptr, size_t datasize,
+	      	   	       door_desc_t *descptr, size_t ndesc)
+	      {
+	          ...  /*  do somethings  */
+
+		  pthread_setcancelstate(PTHREAD_CANCEL_ENABLE, &oldstate);
+		  pthread_cleanup_push(server_proc_cleanup, &cleanup_arg);
+
+		  ...  /*  do somethings  */
+
+		  pthread_cleanup_pop(0);
+		  pthread_setcancelstate(oldstate, NULL);
+
+		  ...  /*  do somethings  */
+
+		  door_return((char *)&result, sizeof(result), NULL, 0);
+	      }
+
+	      void server_proc_cleanup(void *arg)
+	      {
+	          ...
+	      }
+
+	    /*  thread cleanup mechanism only active at the code between pthread_cleanup_push() and pthread_cleanup_pop()  */
+	    
 	   	   
 	   
 	   
