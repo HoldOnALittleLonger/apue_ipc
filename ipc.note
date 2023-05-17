@@ -863,6 +863,108 @@ Chapter 15 : Door
 	      }
 
 	    /*  thread cleanup mechanism only active at the code between pthread_cleanup_push() and pthread_cleanup_pop()  */
+
+
+Chapter 16 : Sun RPC
+    Sun RPC is the default implementation of RPC in linux.
+
+    Overview :
+      distributive application :
+        distribute functionality into some processes and these processes use IPC to communicate with each other.
+
+      explicit network programming :
+        call socket API or XTI API directly at the program communication part.
+
+      implicit network programming :
+        use RPC API to instead of socket API or XTI API.
+
+      RPC API may use network I/O,but for programmer,that should is not visible.
+      if an application contains RPC components,then should introduce these components in a RPC specification file,which
+      is suffix .x  .
+        e.g.
+	  struct square_in {
+	      long arg1;
+	  };
+
+	  struct square_out {
+	      long res1;
+	  };
+
+	  program SQUARE_PROG {
+	      version SQUARE_VERS {
+	          square_out SQUAREPROG(square_in) = 1;	/*  procedure number = 1  */
+	      } = 1;	     /*  version number  */
+	  } = 0x31230000;    /*  program number  */
+
+	  /*  ---  square.x  ---  */
+	  /*  Sun RPC software packet tool 'rpcgen',it is able to generate a header from *.x RPC specification file  */
+	  /*  for above exampe,rpcgen will generates square_svc. square_xdr.c square_clnt.c square.h  */
+
+      if user want use Sun RPC,then should define a *.x file and use rpcgen to generates these files.
+      client program needs *_clnt.c(client stub) *_xdr.c(XDR) and others.
+      server program needs *_svc.c(server main file) *_xdr.c and others.
+      user have to define main file and others for client program,and have to define server procedure file and others
+      for server program.
+      server procedure has prototype 
+        <return pointer type> <lowercase name_in_*.x>_<version number>_svc(<args pointer type>, struct svc_req *rqstp);
+	/*  square_out *squareprog_1_svc(square_in *argp, struct svc_req *rqstp);  */
+      and client must call server procedure through client stub,which has prototype 
+        <return pointer type> <lowercase name_in_*.x>_<version number>(<args pointer type>, CLIENT *clnt);
+	/*  square_out *squareprog_1(square_in *argp, CLIENT *clnt);  */
+
+      /*  !!  before start server,have to ensure 'rpcbind' have been starting,if restart 'rpcbind',all rpc server program
+      	      have to restart.
+	      rpcbind is a universal address to RPC program number mapper.
+	      server register itself on rpc port mapper,client establish connection with rpc port mapper via clnt_create().
+      */
+
+      <rpc/rpc.h>
+      CLIENT *clnt_create(char *host, unsigned long prog, unsigned long vers, char *proto);
+      /*  clnt_create - create client handle for client program.
+       *  @host - host name,or IPv4/IPv6 address.
+       *  @prog - program name,it should be mapped to program number by rpcgen.
+       *  @vers - version number.
+       *  @proto - protocol,i.e. tcp,udp, ... .
+       *  return - return CLIENT struct pointer,return NULL if failed.
+       */
+
+       client - server RPC steps :
+         server start
+	 server stub blocked until client request has came
+	 client calls client stub
+	 clnt packs the arguments given by client (marshaling) to construct network message
+	 rpc library function invocation,send network message to server(via system call)
+	 server received network message
+	 server stub unmarshaling arguments from network message
+	 server stub calls server procedure with the arguments
+	 server procedure working
+	 server procedure return result to server stub
+	 server stub marshaling result and construct network message
+	 rpc library function invocation,send network message to client(via system call)
+	 client stub received network message
+	 client stub unmarshaling result from network message
+	 client stub returns result to client
+
+	 /*  network communication is implicit  */
+
+
+      /*  generally,clnt and clnt function declare result as static object,that means it is not thread-safe function  */
+
+    Multi-threads :
+
+    Server binding :
+
+    Identify :
+
+    Timeout and Resend :
+
+    Invocation :
+
+    Prematurely terminate :
+
+    XDR external data representation :
+
+    RPC group form :
 	    
 	   	   
 	   
