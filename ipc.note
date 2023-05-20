@@ -951,6 +951,27 @@ Chapter 16 : Sun RPC
       /*  generally,clnt and clnt function declare result as static object,that means it is not thread-safe function  */
 
     Multi-threads :
+      in default,Sun RPC server procedure is single-thread,iterative server.
+      for on Multi-threads,have to use option on rpcgen.
+      -M : start multi-threads
+      -A : start a new thread when a request come  /*  linux rpcgen doesnt have this option  */
+
+      if multi-threads is on,then clnt dont use static object to save result,and clnt dont
+      returns pointer as longer,it will returns state code,RPC_SUCCESS means rpc call was succeed.
+      clnt has new prototype :
+        enum clnt_stat <lowercase name_in_*.x>_<version number>(in *argp, out *clnt_res, CLIENT *clnt);
+      svc has new prototype :
+        bool_t <lowercase name_in_*.x>_<version number>_svc(in *, out *, struct svc_req *);
+
+      in the MT case,user have to define free function :
+        int <lowercase name_in_*.x>_<version number>_freeresult(SVCXPRT *transp, xdrproc_t xdr_result, caddr_t result);
+	/*  this function just calls "xdr_free(xdr_result, result);" and return 1.
+	 *  if server procedure allocated heap space,then this function will recycle memory.
+	 *   even dont allocated any memory,it still needed.
+	 */
+
+      !!  not all system supports to MT.
+
 
     Server binding :
 
