@@ -1014,6 +1014,99 @@ Chapter 16 : Sun RPC
        */
 
     Identify :
+      in default,RPC request dont contains client identifier,and server dont care about who is current client.
+      (null authentication or AUTH_NONE)
+
+      Unix authentication (AUTH_SYS) :
+        Unix authetication is made up by host,effect userID,effect groupID,several aux groupID.
+
+	<rpc/svc.h>
+	struct svc_req {
+	    rpcprog_t rq_prog;		/*  service program number  */
+	    rpcvers_t rq_vers;		/*  service protocol version */
+	    rpcproc_t rq_proc;		/*  the desired procedure  */
+	    struct opaque_auth rq_cred;	/*  raw creds from the wire  */
+	    caddr_t rq_clntcred;	/*  read only cooked cred  */
+	    SVCXPRT *rq_xprt;		/*  associated transport  */
+	};
+
+	/*  if system supports this authenticate type indicated by rq_cred.oa_flavor,then
+	 *  the struct pointed by rq_clntcred will be coverted by system to a new struct type
+	 *  which is correspond with that authenticate type.
+	 *  for unix authentication,rq_clntcred points to a struct named authunix_parms.
+	 */
+
+	/*  "raw" means that while RPC is running,system does not deal with the data pointed by
+	 *  rq_cred.oa_base.
+	 */
+
+	<rpc/auth_unix.h>
+	struct authunix_parms {
+	    u_long aup_time;
+	    char *aup_machname;
+	    __uid_t aup_uid;
+	    __gid_t aup_gid;
+	    u_int aup_len;
+	    __gid_t *aup_gids;
+	};  /*  Unix style credentials  */
+
+	<rpc/auth.h>
+	struct opaque_auth {
+	    enum_t oa_flavor;	/*  flavor of auth  */
+	    caddr_t oa_base;	/*  address of more auth stuff  */
+	    u_int oa_length;	/*  not to exceed MAX_AUTH_BYTES  */
+	};
+
+	<rpc/auth.h>
+	AUTH *authunix_create_default(void);
+	/*  authunix_create_default - create a default unix authentication.
+	 *  return - AUTH pointer point to the new unix authentication.
+	 */
+
+	AUTH *authunix_create(char *host, int uid, int gid, int len, int *aup_gids);
+	/*  authunix_create - create a unix authentication.
+	 *  @host : host name.
+	 *  @uid : used ID.
+	 *  @gid : group ID.
+	 *  @len : count of array aup_gids.
+	 *  @aup_gids : aux groupID array.
+	 *  return - return a pointer points to AUTH struct,return NULL if failed.
+	 */
+
+	 /*  authunix_create_default() use the suit parameters to calls authunix_create().  */
+	 /*  struct CLENT has member cl_auth,it is type of AUTH * .  */
+
+	void auth_destroy(AUTH *auth);
+	/*  auth_destroy - destroy a AUTH struct.
+	 *  @auth : a AUTH pointer points to the target.
+	 */
+
+	if svc_req.rq_cred.oa_flavor == AUTH_SYS,then server is able to knows user used unix authentication.
+	/*  #define AUTH_NONE 0
+	 *  #define AUTH_SYS 1
+	 *  #define AUTH_UNIX AUTH_SYS
+	 *  ...
+	 */  /*  auth.h  */
+	for get user identify informations,could covert rq_clntcred to struct authunix_parms *.
+
+	Unix authentication is useless,because it is not secure,any user could create a RPC message with
+	a customize unix authentication.
+	(NFS use Unix authentication,but NFS request is often sent by kernel,and required a reserve port.
+	 but root user still has a way to send customize NFS request.)
+
+	RPC packet actualy has two fields associated with identify -
+	  credential
+	  verifier
+	these fields combined a RPC identifier.
+	/*  NULL authentication,two fields are null.
+	 *  Unix authentication,verifier is null.
+	 */
+
+	other supported authentications :
+	  AUTH_SHORT - another Unix authentication,size of AUTH_SHORT is less than AUTH_UNIX
+	  AUTH_DES - DES is data encryption standard.this authenticate method is named secure RPC.
+	  	     used on NFS is named secure NFS.
+	  AUTH_KERB - based MIT Kerberos authenticating system.
 
     Timeout and Resend :
 
