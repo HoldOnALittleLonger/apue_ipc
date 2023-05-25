@@ -1109,6 +1109,78 @@ Chapter 16 : Sun RPC
 	  AUTH_KERB - based MIT Kerberos authenticating system.
 
     Timeout and Resend :
+      Sun RPC has two timeout value :
+        total timeout : the total time a client waiting for the server responds.(TCP,UDP)
+	retry timeout : interval time for every resend request a client in the times waiting for server responds.(UDP)
+	      	      	/*  TCP automatically resend  */
+
+	<rpc/rpc.h>
+	bool_t clnt_control(CLIENT *clnt, int req, char *info);
+	/*  clnt_control - a macro used to change or retrive various information about a client object.
+	 *  @clnt : client handle pointer.
+	 *  @req : operation type.
+	 *  @info : a pointer to the information,clnt_control will save info in it or retrive from it.
+	 *  return - true or false.
+	 */
+
+	 /*  supported value of req :
+	       CLSET_TIMEOUT		struct timeval
+	       CLGET_TIMEOUT		struct timeval
+	       CLGET_SERVER_ADDR	struct sockaddr_in
+	       CLSET_RETRY_TIMEOUT	struct timeval
+	       CLGET_RETRY_TIMEOUT	struct timeval
+
+	     if use clnt_control() to set timeout,then the timeout parameter passed to clnt_call() will be
+	     ignored in all future calls.
+	     RETRY_TIMEOUT only effect UDP rpc connection.
+	     the default timeout setted up by rpcgen is 25s.
+	  */
+
+      TCP connection manage :
+        Sun RPC clnt default create a TCP connection for communicate with server.this TCP connection could be
+	explicitly stopped by call clnt_destroy(),or implicitly stopped after process exited.
+
+	<rpc/rpc.h>
+	clnt_destroy(CLIENT *clnt);
+	/*  clnt_destroy - a macro that destroys the client's RPC handle.
+	    		   after destroyed,behavior of still use clnt is undefined,
+			   if RPC library opened a socket,it will be closed after this
+			   function was called,if the socket is not automatically opened
+			   by RPC library,then it will still open.
+	 */
+
+      Transaction ID :
+        Transaction ID,that is XID.Sun RPC use XID to identify a client request and server respond.
+	while client send a RPC request,RPC system temporary provides a XID for this request,the
+	respond by server must contains this XID as well.
+	if this request is resent,XID still same.
+
+	purposes of XID :
+	  >  client use XID to identify respond from server.for TCP connection,it is rarely happens
+	     different XID was received,but for UDP connection,it is contrary.
+	  >  server caches responds they were sent to client,XID is used to help server determine
+	     if the request is repeated.
+
+      Server high-speed cache for repeated request :
+        for active this feature,server have to call svc_dg_enablecache().
+	Attention,if it is enabled,this feature will as longer as efficiency until server stop.
+
+	<rpc/rpc.h>
+	int svc_dg_enablecache(SVCXPRT *xprt, unsigned long size);
+	/*  svc_dg_enablecache - enable server cache.
+	 *    		       	 but on Linux 3.10,this function is not supported.
+	 *  @xprt : transport handle,it is a member of struct svc_req.
+	 *  @size : size of cahe should allocate.
+	 *  return - 0 succeed,-1 failed.
+	 */
+
+	if enable server cache,then server holds a FIFO cache,every reply is identify by following
+	fields :
+	  program number
+	  version number
+	  procedure number
+	  XID
+	  client address(IP address and UDP port number)
 
     Invocation :
 
