@@ -1183,8 +1183,68 @@ Chapter 16 : Sun RPC
 	  client address(IP address and UDP port number)
 
     Invocation :
+      classify invocation :
+        1>  exactly once
+	      procedure can only be executed just once.
+	2>  at most once
+	      procedure is either executed once or does not execute.
+	3>  at least once
+	      procedure at least execute once.
+	      (for non-equipotential,this would make trouble.)
+      
+      (TCP)
+      if received a reply,that means remote procedure was executed once,but if it's not,
+      there is no way to know that is procedure was called or not.
+      (before server crash or after server crush,network probably crush)
+
+      (UDP,diable server cache)
+      if received a reply and server is not crush,that means server procedure is at least
+      called once.
+
+      (UDP,enable server cache)
+      if received a reply and server cache is enable,that means server procedure was called
+      just once,constrary,at most once.
+
+      these case means that :
+        if there is no reason,dont use UDP to instead of TCP.
+	for important non-equipotential remote procedure,should build a transaction system.
+	for equipotential,UDP and disable server cache is trivial.
+	for non-equipotential,UDP and disable server cache is a trouble.
 
     Prematurely terminate :
+      prematurely terminate only has sence on TCP,because UDP dont care about drop packet
+      and other cases.
+
+      server prematurely terminate :
+        when server stopped in a procedure invocation,TCP socket would be closed,and FIN section
+	will be sent to client by OS.
+
+	client is now blocked in clnt_call(),but FIN section was received,that is,unexpected reply
+	has came,then error code will be recorded in CLIENT. 
+	/*  all error code defined in <rpc/clnt.h>  */
+
+	in multi-threads environment,call pthread_exit() to stopes worker but TCP socket is still
+	opened,FIN section will not send to client.in this case,client will timeout.
+
+      client prematurely terminate :
+        client stopped when it is blocked in a procedure invocation before server reply,then OS
+	send FIN section to server.
+	
+	server received FIN section(half_close, client no more data to sends),but server send
+	result data,yet.
+
+	client TCP responds RST for server message(OS operates),server will knows client is stopped
+	at next	time to read or write on the TCP connection.
+
+      <rpc/rpc.h>
+      clnt_perror(CLIENT *clnt, char *s);
+      char *clnt_sperror(CLIENT *clnt, char *s);
+      /*  clnt_perror - print a message to stderr indicating why an RPC call failed.
+       *  clnt_sperror - same as clnt_perror() but returns string to instead of write out to stderr.
+       *  @clnt : client handle.
+       *  @s : a string pointer,error message will prepended with @s and a colon.
+       *  return - clnt_sperror() returns a static pointer points to error message.
+       */
 
     XDR external data representation :
 
