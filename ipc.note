@@ -1247,6 +1247,76 @@ Chapter 16 : Sun RPC
        */
 
     XDR external data representation :
+      XDR is kind of language used to describe data,and also a rule for coding.
+      XDR use implicit typing to describing,this means peer is sending and peer is receiving
+      have to know data type and byte order.
+      all data type described via XDR needs sizeof(data) * 4 bytes,and always sending follows
+      big-endian.
+
+      signed integers use two's complement.
+      float-point use IEEE format.
+
+      length varianous field at most has 3 bytes padding in the end.
+
+      e.g.
+        "hello" => XDR
+	[5(4bytes), "hello", 0, 0, 0]
+	(counter)   (src)   (padding)
+
+      rpcgen transformat data defined in *.x to some special type in *.h
+      /*
+	const name = value;  =>  #define name value
+        opaque var[n];  =>  char var[n];
+	opaque var<m>;  =>  struct {
+	       		        u_int var_len;
+				char *var_val;
+				} var;
+	string var<m>;  =>  char *var;
+
+	/*  @m can be ignored,but if it is specified at compile-time,then function libaray
+	 *  would checks if the length is not greater than m.
+	 */
+       */
+
+      <rpc/rpc.h>
+      void xdrmem_create(XDR *xdrs, char *addr, unsigned int size, enum xdr_op op);
+      /*  xdrmem_create - create a xdr memory stream used to decode or encode xdr information.
+       *  @xdrs : XDR handler pointer.XDR handler is used to records XDR states.
+       *  @addr : location memory space used as buffer.
+       *  @size : size of buffer.
+       *  @op : XDR operation,either XDR_DECODE or XDR_ENCODE or XDR_FREE.
+       */
+      /*  XDR handler struct XDR is defined in <rpc/xdr.h>  */
+
+      unsigned int xdr_getpos(XDR *xdrs);
+      /*  xdr_getpos - get current position in xdr memory stream.
+       *  @xdrs : XDR handle.
+       *  return - position offset.
+       */
+
+      xdr_setpos(XDR *xdrs, unsigned int pos);
+      /*  xdr_setpos - a macro used to set position for xdr memory stream.
+       *  @xdrs : XDR handle.
+       *  @pos : new position.
+       *  return - 1 on succeed,otherwise return 0.
+       */
+      /*  xdr_setpos() might works failed on one type of stream but works fine on another type.  */
+
+      bool_t xdr_reference(XDR *xdrs, char *pp, unsigned int size, xdrproc_t proc);
+      /*  xdr_reference - a primitive that provides pointer chasing within structures.
+       *  @xdrs : XDR handle.
+       *  @pp : a pointer points a pointer which points to the target structure.
+       *  @size : size is the sizeof the structure that *pp points to.
+       *  @proc : a function pointer of type of xdrproc.
+       *	  a xdrproc_t exists for each data type which is to be encoded or decoded.
+       */
+      /*  xdr_reference() cant understand NULL pointer.  */
+      /*  pointer chasing is the substitution of the pointer itself with the actual structure it
+       *  points to.
+       */
+      /*  xdrproc is XDR routine that defined in <rpc/xdr.h>  */
+      /*  rpcgen will creates other XDR routine for user-required data object in *.x file  */
+
 
     RPC group form :
 	    
