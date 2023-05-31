@@ -1250,12 +1250,11 @@ Chapter 16 : Sun RPC
       XDR is kind of language used to describe data,and also a rule for coding.
       XDR use implicit typing to describing,this means peer is sending and peer is receiving
       have to know data type and byte order.
-      all data type described via XDR needs sizeof(data) * 4 bytes,and always sending follows
-      big-endian.
+      all data type described via XDR needs n bytes,n = 4 * x,(x = 1, 2, 3, ...)
+      and always sending follows big-endian.
 
       signed integers use two's complement.
       float-point use IEEE format.
-
       length varianous field at most has 3 bytes padding in the end.
 
       e.g.
@@ -1315,12 +1314,173 @@ Chapter 16 : Sun RPC
        *  points to.
        */
       /*  xdrproc is XDR routine that defined in <rpc/xdr.h>  */
-      /*  rpcgen will creates other XDR routine for user-required data object in *.x file  */
+      /*  rpcgen will creates other XDR routine for user-required data object which in *.x file  */
 
+      RNDUP(x);
+      /*  RNDUP - a macro it returns the nearest number near to x which is multiple of 4.
+       *  @x : base value.
+       */
+      /*  BYTES_PER_XDR_UNIT is defined in <rpc/xdr.h>,RNDUP() uses this macro  */
+
+     allocate suit buffer for XDR encode or decode,have to calculate the size of data object.
+     for example :
+       struct A {
+         int a;
+	 char b;
+	 float c;
+	 char d<5>;
+       };
+       A example;
+
+       it at least has size : RNDUP(sizeof(example.a)) + RNDUP(sizeof(example.b)) + RNDUP(sizeof(example.c))
+       	      	       	      + RNDUP(sizeof(int)) + RNDUP(sizeof(char) * 5)
+       string has a counter which is type of int.
+       
+       /*  for maximum unspecified variable-length array,cant do such calculation "RNDUP(sizeof(char) * m)"  */
+
+     optional data :
+       XDR description has three methods to specify optional data.
+         1>
+	   union <name> switch (bool flag) {
+	       case TRUE:
+	           long val;
+	       case FALSE:
+	           void;
+	   };
+
+	   =>
+
+	   struct <name> {
+	       int flag;
+	       union {
+	           long val;
+	       } <name>_u;
+	   };
+
+	   if flag is TRUE,a long type value is follow,otherwise,nothing is follow.
+	   [4bytes flag = 1, value (long)]   	 (if flag is TRUE)
+	   or
+	   [4bytes flag = 0]			 (if flag is FALSE)
+
+	 2>
+	   struct <name> {
+	       long arg<1>;
+	   };
+
+	   =>
+	   
+	   struct <name> {
+	       struct {
+	           u_int arg_len;
+		   long *arg_val;
+	       } arg;
+	   }l
+
+	   it has two format :
+	   [4bytes arg_len = 1, value (long *)]  (if arg_len == 1)
+	   or
+	   [4bytes arg_len = 0]			 (if arg_len == 0)
+
+	 3> 
+	   struct <name> {
+	       long *arg;
+	   };
+
+	   =>
+
+	   struct <name> {
+	       long *arg;
+	   };
+
+	   it has two format :
+	   [4bytes flag = 1, value (long *)]	 (if not nullptr)
+	   or
+	   [4bytes flag = 0]			 (if nullptr)
+	   /*  the flag on there is used to identify if pointer is NULL  */
+
+     deal with list :
+       in XDR description file :
+         struct list_item {
+	     string name<>;
+	     long value;
+	     list_item *next;
+	 };
+
+	 struct arg {
+	     list_item *list;
+	 };
+
+	 =>
+
+	 struct list_item {
+	     char *name;	
+	     long value;	
+	     list_item *next;	
+	 };
+
+	 struct arg {
+	     list_item *list;
+	 };
+
+	 string will encode to [strlen(string)bytes, string, (padding)]
+	 long object will encode to [value (long)]
+	 pointer will encode to [4bytes flag = 1, value (long *)] or [4bytes flag = 0]
+
+	 at the time XDR to decodes list format data,it will automatically allocate memory
+	 and build list,this is allow client easy to traverse list.
 
     RPC group form :
+      RPC request in TCP section :
+        IP head	     	 	 20B
+	TCP head		 20B
+	flag + length		 4B
+	XID    			 4B		xid
+	message type		 4B		msg_type (0 is call)
+	RPC version		 4B		rpcvers
+	program number		 4B		prog
+	version number		 4B		vers
+	procedure number	 4B		proc
+	authentication		 4B		auth_flavor
+	certificate length	 4B		
+	certificate data	 <= 400B	
+	authentication		 4B		auth_flavor
+	verification length	 4B
+	verify data  		 <= 400B
+	procedure arguments
+	
 	    
-	   	   
+	Sun RPC defined record,it could as request or replay.record is constructed by one or
+	more than one fragment.fragment has a 4bytes(big-endian) value as head,top bit is the
+	last fragment flag,lower 31bits is counter.if top bit is equal to zero,that means have
+	other fragments	on there.
+
+      RPC reply in UDP section :
+        IP head			 20B		
+	UDP head		 8B
+	XID 			 4B		xid
+	message type		 4B		msg_type (1 = replied)
+	reply status		 4B		reply_stat (0 = accepted)
+	authentication		 4B		auth_flavor
+	verification length	 4B		
+	verify data  		 <= 400B
+	accept status		 4B		accept_stat (0 = succeed)
+	procedure arguments
+
+      /*  TPC is a stream,but UDP is a datagram,so UDP has length limit.some RPC implementation
+      	  have been limited UDP length to <= 8192Bytes.
+	  if want to send more data,have to use TCP.
+       */
+
+      /*  if certification == AUTH_SYS, verification should is AUTH_NONE  */
+
+    Sun RPC provides total 164 functions :
+      auth function (11)
+      clnt function (26)
+      pmap function (5)
+      rpc function (24)
+      svc function (44)
+      xdr function (54)
+
 	   
 	   
 	   
